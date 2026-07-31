@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Master & ID3 Tag Studio</title>
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      max-width: 500px;
+      width: 100%;
+    }
+    h2 { margin-top: 0; color: #2c2d2e; text-align: center; font-size: 20px; }
+    .section-title {
+      font-weight: bold;
+      color: #2787f5;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+      font-size: 15px;
+    }
+    .group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
+    input[type="file"], input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 9px;
+      box-sizing: border-box;
+      border: 1px solid #dce1e6;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+    }
+    .row { display: flex; gap: 10px; }
+    .row .group { flex: 1; }
+    .btn {
+      width: 100%;
+      background: #2787f5;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    .btn:hover { background: #2276d7; }
+    .btn-download { background: #4bb34b; display: none; margin-top: 10px; }
+    .btn-download:hover { background: #3ec13e; }
+    audio { width: 100%; margin-top: 15px; display: none; }
+    .status { font-size: 13px; color: #666; text-align: center; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Мастеринг & Теги для Стримингов</h2>
+
+  <!-- 1. Загрузка -->
+  <div class="group">
+    <label>Аудиофайл (MP3)</label>
+    <input type="file" id="audioFile" accept="audio/mp3, audio/mpeg">
+  </div>
+
+  <!-- 2. Настройки Мастеринга -->
+  <div class="section-title">1. Пресет мастеринга</div>
+  <div class="row">
+    <div class="group">
+      <label>Жанр / Стиль</label>
+      <select id="genrePreset">
+        <option value="rock">Рок / Метал (Жирный низ, плотность)</option>
+        <option value="pop">Поп / Электроника (Глянец, верха, -14 LUFS)</option>
+        <option value="hiphop">Хип-хоп / Трэп (808-бас & вокал)</option>
+        <option value="acoustic">Акустика / Инди (Мягкая динамика)</option>
+        <option value="neutral" selected>Нейтральный (Чистка мусора & Нормализация)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 3. Метаданные ID3 -->
+  <div class="section-title">2. Метаданные & Обложка (ID3v2)</div>
+  <div class="row">
+    <div class="group">
+      <label>Название трека</label>
+      <input type="text" id="tagTitle" placeholder="Например: Моя Песня">
+    </div>
+    <div class="group">
+      <label>Исполнитель</label>
+      <input type="text" id="tagArtist" placeholder="Имя / Группа">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="group">
+      <label>Альбом</label>
+      <input type="text" id="tagAlbum" placeholder="Single / Album">
+    </div>
+    <div class="group">
+      <label>Год</label>
+      <input type="number" id="tagYear" value="2026">
+    </div>
+  </div>
+
+  <div class="group">
+    <label>Обложка (JPG/PNG, желательно 3000x3000px)</label>
+    <input type="file" id="coverFile" accept="image/jpeg, image/png">
+  </div>
+
+  <!-- 4. Кнопка обработки -->
+  <button id="processBtn" class="btn">Запустить мастеринг и прописать теги</button>
+
+  <!-- Результат -->
+  <div id="status" class="status"></div>
+  <audio id="audioPreview" controls></audio>
+  <button id="downloadBtn" class="btn btn-download">Скачать готовый трек</button>
+</div>
+
+<script>
+  try {
+    if (window.vkBridge) vkBridge.send('VKWebAppInit');
+  } catch(e) {}
+
+  const audioFileInput = document.getElementById('audioFile');
+  const coverFileInput = document.getElementById('coverFile');
+  const processBtn = document.getElementById('processBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const audioPreview = document.getElementById('audioPreview');
+  const statusDiv = document.getElementById('status');
+
+  let originalAudioArrayBuffer = null;
+  let coverArrayBuffer = null;
+  let finalBlobUrl = null;
+  let outputFileName = 'mastered_track.mp3';
+
+  audioFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    outputFileName = file.name.replace(/\.[^/.]+$/, "") + "_mastered.mp3";
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      originalAudioArrayBuffer = evt.target.result;
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  coverFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      coverArrayBuffer = evt.target.result;
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  processBtn.addEventListener('click', async () => {
+    if (!originalAudioArrayBuffer) {
+      alert('Сначала выберите аудиофайл (MP3)!');
+      return;
+    }
+
+    statusDiv.innerText = 'Обработка звука (DSP Мастеринг)...';
+
+    try {
+      // 1. Декодируем аудио с помощью Web Audio API
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const decodedBuffer = await audioCtx.decodeAudioData(originalAudioArrayBuffer.slice(0));
+
+      // 2. Создаем OfflineAudioContext для рендеринга мастеринга
+      const offlineCtx = new OfflineAudioContext(
+        decodedBuffer.numberOfChannels,
+        decodedBuffer.length,
+        decodedBuffer.sampleRate
+      );
+
+      const source = offlineCtx.createBufferSource();
+      source.buffer = decodedBuffer;
+
+      // Цепочка обработки: Cut Filter -> EQ -> Limiter
+      const hpFilter = offlineCtx.createBiquadFilter();
+      hpFilter.type = 'highpass';
+
+      const lowEQ = offlineCtx.createBiquadFilter();
+      lowEQ.type = 'lowshelf';
+
+      const highEQ = offlineCtx.createBiquadFilter();
+      highEQ.type = 'highshelf';
+
+      const compressor = offlineCtx.createDynamicsCompressor();
+
+      // Настройка пресетов
+      const preset = document.getElementById('genrePreset').value;
+
+      if (preset === 'rock') {
+        hpFilter.frequency.value = 35; // срезаем лишний инфразвук
+        lowEQ.frequency.value = 100; lowEQ.gain.value = 2.5; // кач гитар и бочки
+        highEQ.frequency.value = 8000; highEQ.gain.value = -1.0; // смягчаем песок
+        compressor.threshold.value = -16;
+        compressor.ratio.value = 3.5;
+      } else if (preset === 'pop') {
+        hpFilter.frequency.value = 30;
+        lowEQ.frequency.value = 80; lowEQ.gain.value = 1.5;
+        highEQ.frequency.value = 10000; highEQ.gain.value = 3.0; // «глянцевый» верх
+        compressor.threshold.value = -14;
+        compressor.ratio.value = 4.0;
+      } else if (preset === 'hiphop') {
+        hpFilter.frequency.value = 28;
+        lowEQ.frequency.value = 55; lowEQ.gain.value = 3.5; // глубокий 808
+        highEQ.frequency.value = 9000; highEQ.gain.value = 1.5;
+        compressor.threshold.value = -15;
+        compressor.ratio.value = 3.0;
+      } else if (preset === 'acoustic') {
+        hpFilter.frequency.value = 40;
+        lowEQ.frequency.value = 120; lowEQ.gain.value = 0.5;
+        highEQ.frequency.value = 12000; highEQ.gain.value = 1.0;
+        compressor.threshold.value = -10;
+        compressor.ratio.value = 2.0;
+      } else { // neutral
+        hpFilter.frequency.value = 30;
+        lowEQ.frequency.value = 100; lowEQ.gain.value = 0;
+        highEQ.frequency.value = 10000; highEQ.gain.value = 0;
+        compressor.threshold.value = -12;
+        compressor.ratio.value = 2.5;
+      }
+
+      // Соединяем цепочку
+      source.connect(hpFilter);
+      hpFilter.connect(lowEQ);
+      lowEQ.connect(highEQ);
+      highEQ.connect(compressor);
+      compressor.connect(offlineCtx.destination);
+
+      source.start(0);
+
+      // Рендерим обработанный звук
+      const renderedBuffer = await offlineCtx.startRendering();
+
+      statusDiv.innerText = 'Запись ID3-тегов и обложки...';
+
+      // 3. Записываем ID3-теги
+      const writer = new ID3Writer(originalAudioArrayBuffer);
+
+      const title = document.getElementById('tagTitle').value;
+      const artist = document.getElementById('tagArtist').value;
+      const album = document.getElementById('tagAlbum').value;
+      const year = document.getElementById('tagYear').value;
+
+      if (title) writer.setFrame('TIT2', title);
+      if (artist) writer.setFrame('TPE1', [artist]);
+      if (album) writer.setFrame('TALB', album);
+      if (year) writer.setFrame('TYER', parseInt(year));
+
+      if (coverArrayBuffer) {
+        writer.setFrame('APIC', {
+          type: 3, // Front cover
+          data: coverArrayBuffer,
+          description: 'Cover Art'
+        });
+      }
+
+      writer.addTag();
+      const taggedBlob = writer.getBlob();
+
+      finalBlobUrl = URL.createObjectURL(taggedBlob);
+
+      audioPreview.src = finalBlobUrl;
+      audioPreview.style.display = 'block';
+      downloadBtn.style.display = 'block';
+      statusDiv.innerText = 'Готово! Прослушайте результат или скачайте файл.';
+
+    } catch (err) {
+      console.error(err);
+      statusDiv.innerText = 'Ошибка обработки. Убедитесь, что загружен валидный MP3-файл.';
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!finalBlobUrl) return;
+    const link = document.createElement('a');
+    link.download = outputFileName;
+    link.href = finalBlobUrl;
+    link.click();
+  });
+</script>
+
+</body>
+</html>
