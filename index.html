@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Audio Master & ID3 Tag Studio</title>
+  <title>Audio Master WAV & Clean ID3</title>
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -20,7 +19,7 @@
       padding: 24px;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      max-width: 500px;
+      max-width: 520px;
       width: 100%;
     }
     h2 { margin-top: 0; color: #2c2d2e; text-align: center; font-size: 20px; }
@@ -31,7 +30,7 @@
       margin-bottom: 10px;
       border-bottom: 1px solid #eee;
       padding-bottom: 5px;
-      font-size: 15px;
+      font-size: 14px;
     }
     .group { margin-bottom: 12px; }
     label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
@@ -63,28 +62,39 @@
     .btn-download:hover { background: #3ec13e; }
     audio { width: 100%; margin-top: 15px; display: none; }
     .status { font-size: 13px; color: #666; text-align: center; margin-top: 10px; }
+    .info-badge {
+      background: #e5f2ff;
+      color: #0077ff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
 
 <div class="card">
-  <h2>Мастеринг & Теги для Стримингов</h2>
+  <h2>Мастеринг & Очистка для Стримингов</h2>
+  <div class="info-badge">Выходной формат: WAV 16-bit / 44.1 kHz (Удаление мусора Suno)</div>
 
   <!-- 1. Загрузка -->
   <div class="group">
-    <label>Аудиофайл (MP3)</label>
-    <input type="file" id="audioFile" accept="audio/mp3, audio/mpeg">
+    <label>Аудиофайл (MP3 / WAV из Suno)</label>
+    <input type="file" id="audioFile" accept="audio/*">
   </div>
 
   <!-- 2. Настройки Мастеринга -->
-  <div class="section-title">1. Пресет мастеринга</div>
+  <div class="section-title">1. Жанровый пресет мастеринга</div>
   <div class="row">
     <div class="group">
-      <label>Жанр / Стиль</label>
+      <label>Стиль обработки</label>
       <select id="genrePreset">
-        <option value="rock">Рок / Метал (Жирный низ, плотность)</option>
+        <option value="rock">Рок / Метал (Плотный низ, контроль верха)</option>
         <option value="pop">Поп / Электроника (Глянец, верха, -14 LUFS)</option>
-        <option value="hiphop">Хип-хоп / Трэп (808-бас & вокал)</option>
+        <option value="hiphop">Хип-хоп / Трэп (Глубокий 808-бас & вокал)</option>
         <option value="acoustic">Акустика / Инди (Мягкая динамика)</option>
         <option value="neutral" selected>Нейтральный (Чистка мусора & Нормализация)</option>
       </select>
@@ -92,41 +102,47 @@
   </div>
 
   <!-- 3. Метаданные ID3 -->
-  <div class="section-title">2. Метаданные & Обложка (ID3v2)</div>
+  <div class="section-title">2. Чистые метаданные (Без хвостов Suno)</div>
   <div class="row">
-    <div class="group">
-      <label>Название трека</label>
-      <input type="text" id="tagTitle" placeholder="Например: Моя Песня">
-    </div>
     <div class="group">
       <label>Исполнитель</label>
       <input type="text" id="tagArtist" placeholder="Имя / Группа">
     </div>
+    <div class="group">
+      <label>Название трека</label>
+      <input type="text" id="tagTitle" placeholder="Моя Песня">
+    </div>
   </div>
 
   <div class="row">
     <div class="group">
-      <label>Альбом</label>
+      <label>Название альбома</label>
       <input type="text" id="tagAlbum" placeholder="Single / Album">
     </div>
+    <div class="group">
+      <label>Жанр</label>
+      <input type="text" id="tagGenre" placeholder="Rock, Pop, Metal...">
+    </div>
+  </div>
+
+  <div class="row">
     <div class="group">
       <label>Год</label>
       <input type="number" id="tagYear" value="2026">
     </div>
+    <div class="group">
+      <label>Номер трека</label>
+      <input type="number" id="tagTrack" value="1">
+    </div>
   </div>
 
-  <div class="group">
-    <label>Обложка (JPG/PNG, желательно 3000x3000px)</label>
-    <input type="file" id="coverFile" accept="image/jpeg, image/png">
-  </div>
-
-  <!-- 4. Кнопка обработки -->
-  <button id="processBtn" class="btn">Запустить мастеринг и прописать теги</button>
+  <!-- 4. Обработка -->
+  <button id="processBtn" class="btn">Очистить мусор & Конвертировать в WAV 16bit</button>
 
   <!-- Результат -->
   <div id="status" class="status"></div>
   <audio id="audioPreview" controls></audio>
-  <button id="downloadBtn" class="btn btn-download">Скачать готовый трек</button>
+  <button id="downloadBtn" class="btn btn-download">Скачать чистый WAV (16-bit)</button>
 </div>
 
 <script>
@@ -135,164 +151,199 @@
   } catch(e) {}
 
   const audioFileInput = document.getElementById('audioFile');
-  const coverFileInput = document.getElementById('coverFile');
   const processBtn = document.getElementById('processBtn');
   const downloadBtn = document.getElementById('downloadBtn');
   const audioPreview = document.getElementById('audioPreview');
   const statusDiv = document.getElementById('status');
 
-  let originalAudioArrayBuffer = null;
-  let coverArrayBuffer = null;
-  let finalBlobUrl = null;
-  let outputFileName = 'mastered_track.mp3';
+  let audioBuffer = null;
+  let finalWavBlob = null;
+  let outputFileName = 'mastered_track.wav';
 
-  audioFileInput.addEventListener('change', (e) => {
+  audioFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    outputFileName = file.name.replace(/\.[^/.]+$/, "") + "_mastered.mp3";
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      originalAudioArrayBuffer = evt.target.result;
-    };
-    reader.readAsArrayBuffer(file);
-  });
-
-  coverFileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      coverArrayBuffer = evt.target.result;
-    };
-    reader.readAsArrayBuffer(file);
+    outputFileName = file.name.replace(/\.[^/.]+$/, "") + "_mastered.wav";
+    
+    statusDiv.innerText = 'Декодирование аудио...';
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    statusDiv.innerText = 'Файл готов к обработке.';
   });
 
   processBtn.addEventListener('click', async () => {
-    if (!originalAudioArrayBuffer) {
-      alert('Сначала выберите аудиофайл (MP3)!');
+    if (!audioBuffer) {
+      alert('Сначала выберите аудиофайл!');
       return;
     }
 
-    statusDiv.innerText = 'Обработка звука (DSP Мастеринг)...';
+    statusDiv.innerText = 'Обработка звука и сборка 16-bit WAV...';
 
-    try {
-      // 1. Декодируем аудио с помощью Web Audio API
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const decodedBuffer = await audioCtx.decodeAudioData(originalAudioArrayBuffer.slice(0));
+    // 1. Применяем DSP мастеринг
+    const offlineCtx = new OfflineAudioContext(
+      audioBuffer.numberOfChannels,
+      audioBuffer.length,
+      44100 // Фиксируем 44.1 kHz для дистрибьюторов
+    );
 
-      // 2. Создаем OfflineAudioContext для рендеринга мастеринга
-      const offlineCtx = new OfflineAudioContext(
-        decodedBuffer.numberOfChannels,
-        decodedBuffer.length,
-        decodedBuffer.sampleRate
-      );
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
 
-      const source = offlineCtx.createBufferSource();
-      source.buffer = decodedBuffer;
+    const hpFilter = offlineCtx.createBiquadFilter();
+    hpFilter.type = 'highpass';
+    const lowEQ = offlineCtx.createBiquadFilter();
+    lowEQ.type = 'lowshelf';
+    const highEQ = offlineCtx.createBiquadFilter();
+    highEQ.type = 'highshelf';
+    const compressor = offlineCtx.createDynamicsCompressor();
 
-      // Цепочка обработки: Cut Filter -> EQ -> Limiter
-      const hpFilter = offlineCtx.createBiquadFilter();
-      hpFilter.type = 'highpass';
+    const preset = document.getElementById('genrePreset').value;
 
-      const lowEQ = offlineCtx.createBiquadFilter();
-      lowEQ.type = 'lowshelf';
-
-      const highEQ = offlineCtx.createBiquadFilter();
-      highEQ.type = 'highshelf';
-
-      const compressor = offlineCtx.createDynamicsCompressor();
-
-      // Настройка пресетов
-      const preset = document.getElementById('genrePreset').value;
-
-      if (preset === 'rock') {
-        hpFilter.frequency.value = 35; // срезаем лишний инфразвук
-        lowEQ.frequency.value = 100; lowEQ.gain.value = 2.5; // кач гитар и бочки
-        highEQ.frequency.value = 8000; highEQ.gain.value = -1.0; // смягчаем песок
-        compressor.threshold.value = -16;
-        compressor.ratio.value = 3.5;
-      } else if (preset === 'pop') {
-        hpFilter.frequency.value = 30;
-        lowEQ.frequency.value = 80; lowEQ.gain.value = 1.5;
-        highEQ.frequency.value = 10000; highEQ.gain.value = 3.0; // «глянцевый» верх
-        compressor.threshold.value = -14;
-        compressor.ratio.value = 4.0;
-      } else if (preset === 'hiphop') {
-        hpFilter.frequency.value = 28;
-        lowEQ.frequency.value = 55; lowEQ.gain.value = 3.5; // глубокий 808
-        highEQ.frequency.value = 9000; highEQ.gain.value = 1.5;
-        compressor.threshold.value = -15;
-        compressor.ratio.value = 3.0;
-      } else if (preset === 'acoustic') {
-        hpFilter.frequency.value = 40;
-        lowEQ.frequency.value = 120; lowEQ.gain.value = 0.5;
-        highEQ.frequency.value = 12000; highEQ.gain.value = 1.0;
-        compressor.threshold.value = -10;
-        compressor.ratio.value = 2.0;
-      } else { // neutral
-        hpFilter.frequency.value = 30;
-        lowEQ.frequency.value = 100; lowEQ.gain.value = 0;
-        highEQ.frequency.value = 10000; highEQ.gain.value = 0;
-        compressor.threshold.value = -12;
-        compressor.ratio.value = 2.5;
-      }
-
-      // Соединяем цепочку
-      source.connect(hpFilter);
-      hpFilter.connect(lowEQ);
-      lowEQ.connect(highEQ);
-      highEQ.connect(compressor);
-      compressor.connect(offlineCtx.destination);
-
-      source.start(0);
-
-      // Рендерим обработанный звук
-      const renderedBuffer = await offlineCtx.startRendering();
-
-      statusDiv.innerText = 'Запись ID3-тегов и обложки...';
-
-      // 3. Записываем ID3-теги
-      const writer = new ID3Writer(originalAudioArrayBuffer);
-
-      const title = document.getElementById('tagTitle').value;
-      const artist = document.getElementById('tagArtist').value;
-      const album = document.getElementById('tagAlbum').value;
-      const year = document.getElementById('tagYear').value;
-
-      if (title) writer.setFrame('TIT2', title);
-      if (artist) writer.setFrame('TPE1', [artist]);
-      if (album) writer.setFrame('TALB', album);
-      if (year) writer.setFrame('TYER', parseInt(year));
-
-      if (coverArrayBuffer) {
-        writer.setFrame('APIC', {
-          type: 3, // Front cover
-          data: coverArrayBuffer,
-          description: 'Cover Art'
-        });
-      }
-
-      writer.addTag();
-      const taggedBlob = writer.getBlob();
-
-      finalBlobUrl = URL.createObjectURL(taggedBlob);
-
-      audioPreview.src = finalBlobUrl;
-      audioPreview.style.display = 'block';
-      downloadBtn.style.display = 'block';
-      statusDiv.innerText = 'Готово! Прослушайте результат или скачайте файл.';
-
-    } catch (err) {
-      console.error(err);
-      statusDiv.innerText = 'Ошибка обработки. Убедитесь, что загружен валидный MP3-файл.';
+    if (preset === 'rock') {
+      hpFilter.frequency.value = 35;
+      lowEQ.frequency.value = 100; lowEQ.gain.value = 2.5;
+      highEQ.frequency.value = 8000; highEQ.gain.value = -1.0;
+      compressor.threshold.value = -16; compressor.ratio.value = 3.5;
+    } else if (preset === 'pop') {
+      hpFilter.frequency.value = 30;
+      lowEQ.frequency.value = 80; lowEQ.gain.value = 1.5;
+      highEQ.frequency.value = 10000; highEQ.gain.value = 3.0;
+      compressor.threshold.value = -14; compressor.ratio.value = 4.0;
+    } else if (preset === 'hiphop') {
+      hpFilter.frequency.value = 28;
+      lowEQ.frequency.value = 55; lowEQ.gain.value = 3.5;
+      highEQ.frequency.value = 9000; highEQ.gain.value = 1.5;
+      compressor.threshold.value = -15; compressor.ratio.value = 3.0;
+    } else if (preset === 'acoustic') {
+      hpFilter.frequency.value = 40;
+      lowEQ.frequency.value = 120; lowEQ.gain.value = 0.5;
+      highEQ.frequency.value = 12000; highEQ.gain.value = 1.0;
+      compressor.threshold.value = -10; compressor.ratio.value = 2.0;
+    } else {
+      hpFilter.frequency.value = 30;
+      lowEQ.frequency.value = 100; lowEQ.gain.value = 0;
+      highEQ.frequency.value = 10000; highEQ.gain.value = 0;
+      compressor.threshold.value = -12; compressor.ratio.value = 2.5;
     }
+
+    source.connect(hpFilter);
+    hpFilter.connect(lowEQ);
+    lowEQ.connect(highEQ);
+    highEQ.connect(compressor);
+    compressor.connect(offlineCtx.destination);
+    source.start(0);
+
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    // 2. Кодируем в чистый 16-bit PCM WAV (без старых тегов)
+    const wavBuffer = bufferTo16BitWav(renderedBuffer);
+
+    // 3. Записываем только чистые метаданные (INFO chunk)
+    const tags = {
+      artist: document.getElementById('tagArtist').value,
+      title: document.getElementById('tagTitle').value,
+      album: document.getElementById('tagAlbum').value,
+      genre: document.getElementById('tagGenre').value,
+      year: document.getElementById('tagYear').value,
+      track: document.getElementById('tagTrack').value
+    };
+
+    finalWavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+
+    const url = URL.createObjectURL(finalWavBlob);
+    audioPreview.src = url;
+    audioPreview.style.display = 'block';
+    downloadBtn.style.display = 'block';
+    statusDiv.innerText = 'Готово! Весь мусор Suno удален, WAV 16-bit собран.';
   });
 
+  // Функция кодирования AudioBuffer -> 16-bit PCM WAV
+  function bufferTo16BitWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    let result;
+    if (numChannels === 2) {
+      result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+    } else {
+      result = buffer.getChannelData(0);
+    }
+
+    return createWavFile(result, numChannels, sampleRate, bitDepth);
+  }
+
+  function interleave(inputL, inputR) {
+    const length = inputL.length + inputR.length;
+    const result = new Float32Array(length);
+    let index = 0;
+    let inputIndex = 0;
+
+    while (index < length) {
+      result[index++] = inputL[inputIndex];
+      result[index++] = inputR[inputIndex];
+      inputIndex++;
+    }
+    return result;
+  }
+
+  function createWavFile(samples, numChannels, sampleRate, bitDepth) {
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataSize = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    /* RIFF identifier */
+    writeString(view, 0, 'RIFF');
+    /* RIFF chunk length */
+    view.setUint32(4, 36 + dataSize, true);
+    /* RIFF type */
+    writeString(view, 8, 'WAVE');
+    /* format chunk identifier */
+    writeString(view, 12, 'fmt ');
+    /* format chunk length */
+    view.setUint32(16, 16, true);
+    /* sample format (raw) */
+    view.setUint16(20, 1, true);
+    /* channel count */
+    view.setUint16(22, numChannels, true);
+    /* sample rate */
+    view.setUint32(24, sampleRate, true);
+    /* byte rate (sample rate * block align) */
+    view.setUint32(28, sampleRate * blockAlign, true);
+    /* block align */
+    view.setUint16(32, blockAlign, true);
+    /* bits per sample */
+    view.setUint16(34, bitDepth, true);
+    /* data chunk identifier */
+    writeString(view, 36, 'data');
+    /* data chunk length */
+    view.setUint32(40, dataSize, true);
+
+    // Float to 16-bit PCM conversion
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return buffer;
+  }
+
+  function writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
   downloadBtn.addEventListener('click', () => {
-    if (!finalBlobUrl) return;
+    if (!finalWavBlob) return;
     const link = document.createElement('a');
     link.download = outputFileName;
-    link.href = finalBlobUrl;
+    link.href = URL.createObjectURL(finalWavBlob);
     link.click();
   });
 </script>
