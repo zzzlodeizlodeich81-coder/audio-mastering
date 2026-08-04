@@ -79,14 +79,13 @@
       font-weight: 500;
     }
     #coverGroup {
-      display: none; /* Скрыто по умолчанию для WAV */
+      display: none;
       background: #f9fbfd;
       padding: 10px;
       border: 1px dashed #2787f5;
       border-radius: 8px;
     }
 
-    /* Встроенное кастомное уведомление вместо alert() */
     .toast {
       position: fixed;
       bottom: 20px;
@@ -128,8 +127,8 @@
     <div class="group">
       <label>Формат на выходе</label>
       <select id="outputFormat">
-        <option value="wav" selected>WAV (16-bit / 44.1kHz — Для Стримингов)</option>
-        <option value="mp3">MP3 (320 kbps — С поддержкой Обложки)</option>
+        <option value="wav" selected>WAV (16-bit / 44.1kHz — Стандарт Стримингов)</option>
+        <option value="mp3">MP3 (320 kbps — С поддержкой Тегов и Обложки)</option>
       </select>
     </div>
   </div>
@@ -195,13 +194,11 @@
   <button id="downloadBtn" class="btn btn-download">Скачать готовый файл</button>
 </div>
 
-<!-- Блок для тостов -->
 <div id="toast" class="toast"></div>
 
 <script>
   let isVkApp = false;
 
-  // Кастомные тосты вместо alert()
   function showToast(message) {
     const toast = document.getElementById('toast');
     toast.innerText = message;
@@ -211,7 +208,6 @@
     }, 3000);
   }
 
-  // Перехват случайно вызванных alert
   window.alert = function(msg) {
     showToast(msg);
   };
@@ -237,7 +233,6 @@
   let finalBlob = null;
   let rawFileName = 'master_track';
 
-  // Показываем/скрываем блок обложки
   outputFormatSelect.addEventListener('change', () => {
     coverGroup.style.display = outputFormatSelect.value === 'mp3' ? 'block' : 'none';
   });
@@ -255,7 +250,7 @@
       statusDiv.innerText = 'Файл готов к обработке.';
     } catch (err) {
       statusDiv.innerText = '';
-      showToast('Ошибка при чтении аудиофайла!');
+      showToast('Ошибка при чтении файла!');
     }
   });
 
@@ -276,7 +271,7 @@
     const selectedFormat = outputFormatSelect.value;
     statusDiv.innerText = `Применение мастеринга и рендеринг...`;
 
-    // 1. DSP Мастеринг
+    // DSP Мастеринг
     const offlineCtx = new OfflineAudioContext(
       audioBuffer.numberOfChannels,
       audioBuffer.length,
@@ -332,18 +327,10 @@
 
     const renderedBuffer = await offlineCtx.startRendering();
 
-    // 2. Сборка в нужный формат
+    // Сборка формата
     if (selectedFormat === 'wav') {
-      statusDiv.innerText = 'Сборка чистейшего 16-bit WAV...';
-      const tags = {
-        INAM: document.getElementById('tagTitle').value,
-        IART: document.getElementById('tagArtist').value,
-        IPRD: document.getElementById('tagAlbum').value,
-        IGNR: document.getElementById('tagGenre').value,
-        ICRD: document.getElementById('tagYear').value,
-        ITRK: document.getElementById('tagTrack').value
-      };
-      const wavBuffer = createWavWithMetadata(renderedBuffer, tags);
+      statusDiv.innerText = 'Сборка чистейшего 16-bit PCM WAV...';
+      const wavBuffer = createStandardWavBuffer(renderedBuffer);
       finalBlob = new Blob([wavBuffer], { type: 'audio/wav' });
     } else {
       statusDiv.innerText = 'Кодирование в MP3 320 kbps & Вшивка обложки...';
@@ -430,102 +417,59 @@
     return merged.buffer;
   }
 
-  // Конвертер текста в Windows-1251 для WAV (LIST INFO)
-  function stringToWin1251Bytes(str) {
-    const bytes = [];
-    for (let i = 0; i < str.length; i++) {
-      const code = str.charCodeAt(i);
-      if (code < 128) {
-        bytes.push(code);
-      } else if (code >= 0x0410 && code <= 0x044F) {
-        bytes.push(code - 0x0410 + 0xC0);
-      } else if (code === 0x0401) {
-        bytes.push(0xA8);
-      } else if (code === 0x0451) {
-        bytes.push(0xB8);
-      } else {
-        bytes.push(63);
-      }
-    }
-    bytes.push(0);
-    return new Uint8Array(bytes);
-  }
-
-  // WAV Generator с LIST INFO
-  function createWavWithMetadata(buffer, tags) {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
+  // 100% ВАЛИДНЫЙ И СТАНДАРТНЫЙ WAV 16-BIT PCM ДЛЯ МОБИЛЬНЫХ ПЛЕЕРОВ
+  function createStandardWavBuffer(audioBuffer) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const format = 1; // PCM
     const bitDepth = 16;
 
-    let samples = numChannels === 2 ? interleave(buffer.getChannelData(0), buffer.getChannelData(1)) : buffer.getChannelData(0);
-
-    const bytesPerSample = bitDepth / 8;
-    const blockAlign = numChannels * bytesPerSample;
-    const dataSize = samples.length * bytesPerSample;
-
-    const infoSubchunks = [];
-    for (const [key, value] of Object.entries(tags)) {
-      if (value) {
-        const encodedData = stringToWin1251Bytes(String(value));
-        const len = encodedData.length;
-        const subchunk = new Uint8Array(8 + len + (len % 2 !== 0 ? 1 : 0));
-        
-        for (let i = 0; i < 4; i++) subchunk[i] = key.charCodeAt(i);
-        const view = new DataView(subchunk.buffer);
-        view.setUint32(4, len, true);
-        subchunk.set(encodedData, 8);
-        infoSubchunks.push(subchunk);
-      }
+    let result;
+    if (numChannels === 2) {
+      result = interleave(audioBuffer.getChannelData(0), audioBuffer.getChannelData(1));
+    } else {
+      result = audioBuffer.getChannelData(0);
     }
 
-    let listChunkSize = 0;
-    if (infoSubchunks.length > 0) {
-      let infoDataLen = 4;
-      for (const ch of infoSubchunks) infoDataLen += ch.length;
-      listChunkSize = 8 + infoDataLen;
-    }
+    const dataSize = result.length * 2; // 16-bit = 2 bytes per sample
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
 
-    const totalHeaderSize = 44 + dataSize + listChunkSize;
-    const wavBuffer = new ArrayBuffer(totalHeaderSize);
-    const view = new DataView(wavBuffer);
-
+    /* RIFF identifier */
     writeString(view, 0, 'RIFF');
-    view.setUint32(4, totalHeaderSize - 8, true);
+    /* RIFF chunk length */
+    view.setUint32(4, 36 + dataSize, true);
+    /* RIFF type */
     writeString(view, 8, 'WAVE');
+    /* format chunk identifier */
     writeString(view, 12, 'fmt ');
+    /* format chunk length */
     view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
+    /* sample format (raw) */
+    view.setUint16(20, format, true);
+    /* channel count */
     view.setUint16(22, numChannels, true);
+    /* sample rate */
     view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * blockAlign, true);
-    view.setUint16(32, blockAlign, true);
+    /* byte rate (sample rate * block align) */
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    /* block align (channel count * bytes per sample) */
+    view.setUint16(32, numChannels * 2, true);
+    /* bits per sample */
     view.setUint16(34, bitDepth, true);
-    
+    /* data chunk identifier */
     writeString(view, 36, 'data');
+    /* data chunk length */
     view.setUint32(40, dataSize, true);
 
+    // PCM данные 16-bit LE
     let offset = 44;
-    for (let i = 0; i < samples.length; i++, offset += 2) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
+    for (let i = 0; i < result.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, result[i]));
       view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
 
-    if (listChunkSize > 0) {
-      writeString(view, offset, 'LIST');
-      let infoDataLen = 4;
-      for (const ch of infoSubchunks) infoDataLen += ch.length;
-      view.setUint32(offset + 4, infoDataLen, true);
-      writeString(view, offset + 8, 'INFO');
-      
-      let subOffset = offset + 12;
-      const u8Arr = new Uint8Array(wavBuffer);
-      for (const ch of infoSubchunks) {
-        u8Arr.set(ch, subOffset);
-        subOffset += ch.length;
-      }
-    }
-
-    return wavBuffer;
+    return buffer;
   }
 
   function interleave(inputL, inputR) {
@@ -546,7 +490,7 @@
     }
   }
 
-  // УНИВЕРСАЛЬНОЕ СКАЧИВАНИЕ
+  // СКАЧИВАНИЕ
   downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
     const ext = outputFormatSelect.value;
@@ -563,7 +507,7 @@
 
     const blobUrl = URL.createObjectURL(finalBlob);
 
-    // 1. Попытка через VK Bridge (официальное приложение VK)
+    // Скачивание для VK App
     if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
       try {
         await vkBridge.send('VKWebAppDownloadFile', {
@@ -576,7 +520,7 @@
       }
     }
 
-    // 2. Резервный метод для мобильных браузеров и ПК
+    // Резервное скачивание
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const a = document.createElement('a');
     a.href = blobUrl;
