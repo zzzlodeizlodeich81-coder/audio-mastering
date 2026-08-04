@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Master & Tag Studio</title>
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-  <!-- Библиотека для MP3 кодирования -->
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-  <!-- Библиотека для ID3 тегов и обложек (для MP3) -->
   <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
   <style>
     body {
@@ -115,13 +113,11 @@
   <h2>Мастеринг & Очистка для Стримингов</h2>
   <div class="info-badge">Чистый звук без мусора Suno</div>
 
-  <!-- 1. Загрузка -->
   <div class="group">
     <label>Аудиофайл (MP3 / WAV)</label>
     <input type="file" id="audioFile" accept="audio/*">
   </div>
 
-  <!-- 2. Формат и Пресет -->
   <div class="section-title">1. Выбор формата и пресета</div>
   <div class="row">
     <div class="group">
@@ -144,7 +140,6 @@
     </select>
   </div>
 
-  <!-- 3. Метаданные -->
   <div class="section-title">2. Чистые метаданные</div>
   <div class="row">
     <div class="group">
@@ -179,16 +174,13 @@
     </div>
   </div>
 
-  <!-- Поле Обложки (Только для MP3) -->
   <div class="group" id="coverGroup">
     <label>Обложка трека (JPG / PNG)</label>
     <input type="file" id="coverFile" accept="image/jpeg, image/png">
   </div>
 
-  <!-- 4. Обработка -->
   <button id="processBtn" class="btn">Очистить мусор & Обработать</button>
 
-  <!-- Результат -->
   <div id="status" class="status"></div>
   <audio id="audioPreview" controls></audio>
   <button id="downloadBtn" class="btn btn-download">Скачать готовый файл</button>
@@ -197,8 +189,6 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  let isVkApp = false;
-
   function showToast(message) {
     const toast = document.getElementById('toast');
     toast.innerText = message;
@@ -215,7 +205,6 @@
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
-      isVkApp = true;
     }
   } catch(e) {}
 
@@ -417,7 +406,7 @@
     return merged.buffer;
   }
 
-  // 100% ВАЛИДНЫЙ И СТАНДАРТНЫЙ WAV 16-BIT PCM ДЛЯ МОБИЛЬНЫХ ПЛЕЕРОВ
+  // 100% ВАЛИДНЫЙ И СТАНДАРТНЫЙ WAV 16-BIT PCM
   function createStandardWavBuffer(audioBuffer) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
@@ -431,38 +420,24 @@
       result = audioBuffer.getChannelData(0);
     }
 
-    const dataSize = result.length * 2; // 16-bit = 2 bytes per sample
+    const dataSize = result.length * 2;
     const buffer = new ArrayBuffer(44 + dataSize);
     const view = new DataView(buffer);
 
-    /* RIFF identifier */
     writeString(view, 0, 'RIFF');
-    /* RIFF chunk length */
     view.setUint32(4, 36 + dataSize, true);
-    /* RIFF type */
     writeString(view, 8, 'WAVE');
-    /* format chunk identifier */
     writeString(view, 12, 'fmt ');
-    /* format chunk length */
     view.setUint32(16, 16, true);
-    /* sample format (raw) */
     view.setUint16(20, format, true);
-    /* channel count */
     view.setUint16(22, numChannels, true);
-    /* sample rate */
     view.setUint32(24, sampleRate, true);
-    /* byte rate (sample rate * block align) */
     view.setUint32(28, sampleRate * numChannels * 2, true);
-    /* block align (channel count * bytes per sample) */
     view.setUint16(32, numChannels * 2, true);
-    /* bits per sample */
     view.setUint16(34, bitDepth, true);
-    /* data chunk identifier */
     writeString(view, 36, 'data');
-    /* data chunk length */
     view.setUint32(40, dataSize, true);
 
-    // PCM данные 16-bit LE
     let offset = 44;
     for (let i = 0; i < result.length; i++, offset += 2) {
       const s = Math.max(-1, Math.min(1, result[i]));
@@ -490,8 +465,8 @@
     }
   }
 
-  // СКАЧИВАНИЕ
-  downloadBtn.addEventListener('click', async () => {
+  // НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ В VK
+  downloadBtn.addEventListener('click', () => {
     if (!finalBlob) return;
     const ext = outputFormatSelect.value;
     
@@ -505,33 +480,19 @@
     }
     fileName = `${fileName}.${ext}`;
 
-    const blobUrl = URL.createObjectURL(finalBlob);
-
-    // Скачивание для VK App
-    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
-      try {
-        await vkBridge.send('VKWebAppDownloadFile', {
-          url: blobUrl,
-          filename: fileName
-        });
-        return;
-      } catch (e) {
-        console.log('VKWebAppDownloadFile fallback');
-      }
-    }
-
-    // Резервное скачивание
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = fileName;
-    if (isMobile) a.target = '_blank';
-    
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    // Переводим Blob в DataURL для гарантированного сохранения полноценного файла на телефоне
+    const reader = new FileReader();
+    reader.onloadend = function () {
+      const dataUrl = reader.result;
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    reader.readAsDataURL(finalBlob);
   });
 </script>
 
