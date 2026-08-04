@@ -465,7 +465,7 @@
     }
   }
 
-  // НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ В VK
+// НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
   downloadBtn.addEventListener('click', () => {
     if (!finalBlob) return;
     const ext = outputFormatSelect.value;
@@ -480,21 +480,35 @@
     }
     fileName = `${fileName}.${ext}`;
 
-    // Переводим Blob в DataURL для гарантированного сохранения полноценного файла на телефоне
-    const reader = new FileReader();
-    reader.onloadend = function () {
-      const dataUrl = reader.result;
+    // Создаем Blob URL
+    const blobUrl = URL.createObjectURL(finalBlob);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Для мобильного VK: открываем Blob в новом окне/вкладке
+      // Мобильный браузер автоматически предложит сохранить полный файл
+      const newWin = window.open(blobUrl, '_blank');
+      
+      // Если встроенный шторка VK заблокировала новое окно — делаем fallback через клик
+      if (!newWin) {
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 100);
+      }
+    } else {
+      // Для ПК стандартный клик
       const a = document.createElement('a');
-      a.href = dataUrl;
+      a.href = blobUrl;
       a.download = fileName;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-    };
-    reader.readAsDataURL(finalBlob);
-  });
-</script>
+      setTimeout(() => document.body.removeChild(a), 100);
+    }
 
-</body>
-</html>
+    // Освобождаем память через минуту
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  });
