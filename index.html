@@ -366,7 +366,7 @@
     statusDiv.innerText = `Готово! Файл ${selectedFormat.toUpperCase()} успешно сформирован.`;
   });
 
-  // MP3 Encoder (320 kbps)
+  // ИСПРАВЛЕННЫЙ MP3 ENCODER (Без лишних хвостов)
   function encodeMp3320(buffer) {
     const channels = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
@@ -389,9 +389,16 @@
     }
 
     for (let i = 0; i < sampleCount; i += sampleBlockSize) {
-      const leftChunk = leftInt16.subarray(i, i + sampleBlockSize);
-      const rightChunk = rightInt16.subarray(i, i + sampleBlockSize);
-      let mp3buf = channels === 2 ? mp3encoder.encodeBuffer(leftChunk, rightChunk) : mp3encoder.encodeBuffer(leftChunk);
+      const leftChunk = leftInt16.subarray(i, Math.min(i + sampleBlockSize, sampleCount));
+      const rightChunk = rightInt16.subarray(i, Math.min(i + sampleBlockSize, sampleCount));
+      
+      let mp3buf;
+      if (channels === 2) {
+        mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+      } else {
+        mp3buf = mp3encoder.encodeBuffer(leftChunk);
+      }
+      
       if (mp3buf.length > 0) mp3Data.push(mp3buf);
     }
 
@@ -409,7 +416,7 @@
     return merged.buffer;
   }
 
-  // 100% ВАЛИДНЫЙ И СТАНДАРТНЫЙ WAV 16-BIT PCM
+  // ИСПРАВЛЕННЫЙ WAV 16-BIT PCM (Точный размер кадра)
   function createStandardWavBuffer(audioBuffer) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
@@ -423,7 +430,9 @@
       result = audioBuffer.getChannelData(0);
     }
 
-    const dataSize = result.length * 2;
+    const bytesPerSample = bitDepth / 8; 
+    const dataSize = result.length * bytesPerSample;
+    
     const buffer = new ArrayBuffer(44 + dataSize);
     const view = new DataView(buffer);
 
@@ -435,8 +444,8 @@
     view.setUint16(20, format, true);
     view.setUint16(22, numChannels, true);
     view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * 2, true);
-    view.setUint16(32, numChannels * 2, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+    view.setUint16(32, numChannels * bytesPerSample, true);
     view.setUint16(34, bitDepth, true);
     writeString(view, 36, 'data');
     view.setUint32(40, dataSize, true);
@@ -485,12 +494,10 @@
 
     statusDiv.innerText = 'Подготовка файла к сохранению...';
 
-    // Конвертируем Blob в Base64 DataURL
     const reader = new FileReader();
     reader.onloadend = async function () {
       const dataUrl = reader.result;
 
-      // Если работаем внутри VK Mini Apps
       if (isVkEnvironment && window.vkBridge && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
         try {
           await vkBridge.send('VKWebAppDownloadFile', {
@@ -504,7 +511,6 @@
         }
       }
 
-      // Fallback для обычного браузера на ПК или мобильных браузеров вне VK
       const a = document.createElement('a');
       a.href = dataUrl;
       a.download = fileName;
