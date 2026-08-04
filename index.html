@@ -189,6 +189,8 @@
 <div id="toast" class="toast"></div>
 
 <script>
+  let isVkEnvironment = false;
+
   function showToast(message) {
     const toast = document.getElementById('toast');
     toast.innerText = message;
@@ -205,6 +207,7 @@
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
+      isVkEnvironment = true;
     }
   } catch(e) {}
 
@@ -465,8 +468,8 @@
     }
   }
 
-// НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
-  downloadBtn.addEventListener('click', () => {
+  // НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ VK MINI APPS И БРАУЗЕРОВ
+  downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
     const ext = outputFormatSelect.value;
     
@@ -480,35 +483,40 @@
     }
     fileName = `${fileName}.${ext}`;
 
-    // Создаем Blob URL
-    const blobUrl = URL.createObjectURL(finalBlob);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    statusDiv.innerText = 'Подготовка файла к сохранению...';
 
-    if (isMobile) {
-      // Для мобильного VK: открываем Blob в новом окне/вкладке
-      // Мобильный браузер автоматически предложит сохранить полный файл
-      const newWin = window.open(blobUrl, '_blank');
-      
-      // Если встроенный шторка VK заблокировала новое окно — делаем fallback через клик
-      if (!newWin) {
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 100);
+    // Конвертируем Blob в Base64 DataURL
+    const reader = new FileReader();
+    reader.onloadend = async function () {
+      const dataUrl = reader.result;
+
+      // Если работаем внутри VK Mini Apps
+      if (isVkEnvironment && window.vkBridge && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
+        try {
+          await vkBridge.send('VKWebAppDownloadFile', {
+            url: dataUrl,
+            filename: fileName
+          });
+          statusDiv.innerText = 'Файл отправлен на загрузку!';
+          return;
+        } catch (e) {
+          console.warn('VK Bridge download error, using fallback:', e);
+        }
       }
-    } else {
-      // Для ПК стандартный клик
+
+      // Fallback для обычного браузера на ПК или мобильных браузеров вне VK
       const a = document.createElement('a');
-      a.href = blobUrl;
+      a.href = dataUrl;
       a.download = fileName;
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => document.body.removeChild(a), 100);
-    }
+      document.body.removeChild(a);
+      statusDiv.innerText = 'Файл сохранен!';
+    };
 
-    // Освобождаем память через минуту
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    reader.readAsDataURL(finalBlob);
   });
+</script>
+
+</body>
+</html>
