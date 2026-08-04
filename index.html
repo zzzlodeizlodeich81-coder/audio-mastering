@@ -17,6 +17,7 @@
       padding: 20px;
       display: flex;
       justify-content: center;
+      position: relative;
     }
     .card {
       background: white;
@@ -60,6 +61,7 @@
       font-size: 15px;
       cursor: pointer;
       margin-top: 15px;
+      transition: background 0.2s;
     }
     .btn:hover { background: #2276d7; }
     .btn-download { background: #4bb34b; display: none; margin-top: 10px; }
@@ -82,6 +84,29 @@
       padding: 10px;
       border: 1px dashed #2787f5;
       border-radius: 8px;
+    }
+
+    /* Встроенное кастомное уведомление вместо alert() */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #2c2d2e;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
     }
   </style>
 </head>
@@ -170,9 +195,32 @@
   <button id="downloadBtn" class="btn btn-download">Скачать готовый файл</button>
 </div>
 
+<!-- Блок для тостов -->
+<div id="toast" class="toast"></div>
+
 <script>
+  let isVkApp = false;
+
+  // Кастомные тосты вместо alert()
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.innerText = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3000);
+  }
+
+  // Перехват случайно вызванных alert
+  window.alert = function(msg) {
+    showToast(msg);
+  };
+
   try {
-    if (window.vkBridge) vkBridge.send('VKWebAppInit');
+    if (window.vkBridge) {
+      vkBridge.send('VKWebAppInit');
+      isVkApp = true;
+    }
   } catch(e) {}
 
   const audioFileInput = document.getElementById('audioFile');
@@ -187,15 +235,11 @@
   let audioBuffer = null;
   let coverArrayBuffer = null;
   let finalBlob = null;
-  let rawFileName = 'track';
+  let rawFileName = 'master_track';
 
-  // Показываем/скрываем блок обложки в зависимости от формата
+  // Показываем/скрываем блок обложки
   outputFormatSelect.addEventListener('change', () => {
-    if (outputFormatSelect.value === 'mp3') {
-      coverGroup.style.display = 'block';
-    } else {
-      coverGroup.style.display = 'none';
-    }
+    coverGroup.style.display = outputFormatSelect.value === 'mp3' ? 'block' : 'none';
   });
 
   audioFileInput.addEventListener('change', async (e) => {
@@ -204,10 +248,15 @@
     rawFileName = file.name.replace(/\.[^/.]+$/, "");
     
     statusDiv.innerText = 'Декодирование аудио...';
-    const arrayBuffer = await file.arrayBuffer();
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    statusDiv.innerText = 'Файл готов к обработке.';
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      statusDiv.innerText = 'Файл готов к обработке.';
+    } catch (err) {
+      statusDiv.innerText = '';
+      showToast('Ошибка при чтении аудиофайла!');
+    }
   });
 
   coverFileInput.addEventListener('change', (e) => {
@@ -220,7 +269,7 @@
 
   processBtn.addEventListener('click', async () => {
     if (!audioBuffer) {
-      alert('Сначала выберите аудиофайл!');
+      showToast('Сначала выберите аудиофайл!');
       return;
     }
 
@@ -300,7 +349,6 @@
       statusDiv.innerText = 'Кодирование в MP3 320 kbps & Вшивка обложки...';
       const rawMp3Buffer = encodeMp3320(renderedBuffer);
       
-      // Вшиваем ID3v2 теги и обложку в MP3
       try {
         const writer = new ID3Writer(rawMp3Buffer);
         const artist = document.getElementById('tagArtist').value;
@@ -364,12 +412,7 @@
     for (let i = 0; i < sampleCount; i += sampleBlockSize) {
       const leftChunk = leftInt16.subarray(i, i + sampleBlockSize);
       const rightChunk = rightInt16.subarray(i, i + sampleBlockSize);
-      let mp3buf;
-      if (channels === 2) {
-        mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
-      } else {
-        mp3buf = mp3encoder.encodeBuffer(leftChunk);
-      }
+      let mp3buf = channels === 2 ? mp3encoder.encodeBuffer(leftChunk, rightChunk) : mp3encoder.encodeBuffer(leftChunk);
       if (mp3buf.length > 0) mp3Data.push(mp3buf);
     }
 
@@ -387,39 +430,34 @@
     return merged.buffer;
   }
 
-// Конвертер текста в Windows-1251 для корректной кириллицы в WAV (LIST INFO)
+  // Конвертер текста в Windows-1251 для WAV (LIST INFO)
   function stringToWin1251Bytes(str) {
     const bytes = [];
     for (let i = 0; i < str.length; i++) {
       const code = str.charCodeAt(i);
       if (code < 128) {
         bytes.push(code);
-      } else if (code >= 0x0410 && code <= 0x044F) { // А-Я, а-я
+      } else if (code >= 0x0410 && code <= 0x044F) {
         bytes.push(code - 0x0410 + 0xC0);
-      } else if (code === 0x0401) { // Ё
+      } else if (code === 0x0401) {
         bytes.push(0xA8);
-      } else if (code === 0x0451) { // ё
+      } else if (code === 0x0451) {
         bytes.push(0xB8);
       } else {
-        bytes.push(63); // '?' для нераспознанных
+        bytes.push(63);
       }
     }
-    bytes.push(0); // Null-terminator
+    bytes.push(0);
     return new Uint8Array(bytes);
   }
 
-  // WAV Generator с корректной кодировкой LIST INFO
+  // WAV Generator с LIST INFO
   function createWavWithMetadata(buffer, tags) {
     const numChannels = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
     const bitDepth = 16;
 
-    let samples;
-    if (numChannels === 2) {
-      samples = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
-    } else {
-      samples = buffer.getChannelData(0);
-    }
+    let samples = numChannels === 2 ? interleave(buffer.getChannelData(0), buffer.getChannelData(1)) : buffer.getChannelData(0);
 
     const bytesPerSample = bitDepth / 8;
     const blockAlign = numChannels * bytesPerSample;
@@ -432,14 +470,9 @@
         const len = encodedData.length;
         const subchunk = new Uint8Array(8 + len + (len % 2 !== 0 ? 1 : 0));
         
-        // Key Header (INAM, IART, etc.)
         for (let i = 0; i < 4; i++) subchunk[i] = key.charCodeAt(i);
-        
-        // Size
         const view = new DataView(subchunk.buffer);
         view.setUint32(4, len, true);
-        
-        // Payload Bytes
         subchunk.set(encodedData, 8);
         infoSubchunks.push(subchunk);
       }
@@ -447,7 +480,7 @@
 
     let listChunkSize = 0;
     if (infoSubchunks.length > 0) {
-      let infoDataLen = 4; // 'INFO'
+      let infoDataLen = 4;
       for (const ch of infoSubchunks) infoDataLen += ch.length;
       listChunkSize = 8 + infoDataLen;
     }
@@ -498,8 +531,7 @@
   function interleave(inputL, inputR) {
     const length = inputL.length + inputR.length;
     const result = new Float32Array(length);
-    let index = 0;
-    let inputIndex = 0;
+    let index = 0, inputIndex = 0;
     while (index < length) {
       result[index++] = inputL[inputIndex];
       result[index++] = inputR[inputIndex];
@@ -514,13 +546,48 @@
     }
   }
 
-  downloadBtn.addEventListener('click', () => {
+  // УНИВЕРСАЛЬНОЕ СКАЧИВАНИЕ
+  downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
     const ext = outputFormatSelect.value;
-    const link = document.createElement('a');
-    link.download = `${rawFileName}.${ext}`;
-    link.href = URL.createObjectURL(finalBlob);
-    link.click();
+    
+    const artist = document.getElementById('tagArtist').value.trim();
+    const title = document.getElementById('tagTitle').value.trim();
+    let fileName = rawFileName;
+    if (artist && title) {
+      fileName = `${artist} - ${title}`;
+    } else if (title) {
+      fileName = title;
+    }
+    fileName = `${fileName}.${ext}`;
+
+    const blobUrl = URL.createObjectURL(finalBlob);
+
+    // 1. Попытка через VK Bridge (официальное приложение VK)
+    if (isVkApp && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
+      try {
+        await vkBridge.send('VKWebAppDownloadFile', {
+          url: blobUrl,
+          filename: fileName
+        });
+        return;
+      } catch (e) {
+        console.log('VKWebAppDownloadFile fallback');
+      }
+    }
+
+    // 2. Резервный метод для мобильных браузеров и ПК
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    if (isMobile) a.target = '_blank';
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
   });
 </script>
 
