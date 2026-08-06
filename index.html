@@ -64,6 +64,11 @@
     .btn:hover { background: #2276d7; }
     .btn-download { background: #4bb34b; display: none; margin-top: 10px; }
     .btn-download:hover { background: #3ec13e; }
+    .btn-donate {
+      background: #ff9800;
+      margin-top: 10px;
+    }
+    .btn-donate:hover { background: #e68a00; }
     audio { width: 100%; margin-top: 15px; display: none; }
     .status { font-size: 13px; color: #666; text-align: center; margin-top: 10px; }
     .info-badge {
@@ -83,7 +88,6 @@
       border: 1px dashed #2787f5;
       border-radius: 8px;
     }
-
     .toast {
       position: fixed;
       bottom: 20px;
@@ -183,13 +187,24 @@
 
   <div id="status" class="status"></div>
   <audio id="audioPreview" controls></audio>
+  
   <button id="downloadBtn" class="btn btn-download">Скачать готовый файл</button>
+  <button id="donateBtn" class="btn btn-donate">Поддержать разработчика ☕</button>
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
   let isVkEnvironment = false;
+  let currentObjectUrl = null;
+
+  // Инициализация VK Bridge
+  try {
+    if (window.vkBridge) {
+      vkBridge.send('VKWebAppInit');
+      isVkEnvironment = true;
+    }
+  } catch(e) {}
 
   function showToast(message) {
     const toast = document.getElementById('toast');
@@ -204,19 +219,13 @@
     showToast(msg);
   };
 
-  try {
-    if (window.vkBridge) {
-      vkBridge.send('VKWebAppInit');
-      isVkEnvironment = true;
-    }
-  } catch(e) {}
-
   const audioFileInput = document.getElementById('audioFile');
   const coverFileInput = document.getElementById('coverFile');
   const outputFormatSelect = document.getElementById('outputFormat');
   const coverGroup = document.getElementById('coverGroup');
   const processBtn = document.getElementById('processBtn');
   const downloadBtn = document.getElementById('downloadBtn');
+  const donateBtn = document.getElementById('donateBtn');
   const audioPreview = document.getElementById('audioPreview');
   const statusDiv = document.getElementById('status');
 
@@ -263,7 +272,6 @@
     const selectedFormat = outputFormatSelect.value;
     statusDiv.innerText = `Применение мастеринга и рендеринг...`;
 
-    // DSP Мастеринг
     const offlineCtx = new OfflineAudioContext(
       audioBuffer.numberOfChannels,
       audioBuffer.length,
@@ -280,6 +288,14 @@
     const highEQ = offlineCtx.createBiquadFilter();
     highEQ.type = 'highshelf';
     const compressor = offlineCtx.createDynamicsCompressor();
+
+    // Защитный Brickwall Limiter на выходе
+    const limiter = offlineCtx.createDynamicsCompressor();
+    limiter.threshold.value = -0.5;
+    limiter.knee.value = 0.0;
+    limiter.ratio.value = 20.0;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.1;
 
     const preset = document.getElementById('genrePreset').value;
 
@@ -314,12 +330,12 @@
     hpFilter.connect(lowEQ);
     lowEQ.connect(highEQ);
     highEQ.connect(compressor);
-    compressor.connect(offlineCtx.destination);
+    compressor.connect(limiter);
+    limiter.connect(offlineCtx.destination);
     source.start(0);
 
     const renderedBuffer = await offlineCtx.startRendering();
 
-    // Сборка формата
     if (selectedFormat === 'wav') {
       statusDiv.innerText = 'Сборка чистейшего 16-bit PCM WAV...';
       const wavBuffer = createStandardWavBuffer(renderedBuffer);
@@ -359,14 +375,18 @@
       }
     }
 
-    const url = URL.createObjectURL(finalBlob);
-    audioPreview.src = url;
+    // Освобождаем старый URL для экономии памяти
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+    }
+    currentObjectUrl = URL.createObjectURL(finalBlob);
+    
+    audioPreview.src = currentObjectUrl;
     audioPreview.style.display = 'block';
     downloadBtn.style.display = 'block';
     statusDiv.innerText = `Готово! Файл ${selectedFormat.toUpperCase()} успешно сформирован.`;
   });
 
-  // ИСПРАВЛЕННЫЙ MP3 ENCODER (Без лишних хвостов)
   function encodeMp3320(buffer) {
     const channels = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
@@ -416,11 +436,10 @@
     return merged.buffer;
   }
 
-  // ИСПРАВЛЕННЫЙ WAV 16-BIT PCM (Точный размер кадра)
   function createStandardWavBuffer(audioBuffer) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
-    const format = 1; // PCM
+    const format = 1; 
     const bitDepth = 16;
 
     let result;
@@ -477,11 +496,24 @@
     }
   }
 
-  // НАДЕЖНОЕ СКАЧИВАНИЕ ДЛЯ VK MINI APPS И БРАУЗЕРОВ
+  // Скачивание файла с предварительным показом рекламы VK
   downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
+
+    // Пытаемся показать рекламу перед выгрузкой
+    if (isVkEnvironment && window.vkBridge) {
+      try {
+        await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' });
+      } catch (e) {
+        console.log('Реклама была пропущена или недоступна:', e);
+      }
+    }
+
+    saveProcessedFile();
+  });
+
+  function saveProcessedFile() {
     const ext = outputFormatSelect.value;
-    
     const artist = document.getElementById('tagArtist').value.trim();
     const title = document.getElementById('tagTitle').value.trim();
     let fileName = rawFileName;
@@ -507,7 +539,7 @@
           statusDiv.innerText = 'Файл отправлен на загрузку!';
           return;
         } catch (e) {
-          console.warn('VK Bridge download error, using fallback:', e);
+          console.warn('VK Bridge download error, fallback to <a> tag:', e);
         }
       }
 
@@ -521,6 +553,24 @@
     };
 
     reader.readAsDataURL(finalBlob);
+  }
+
+  // Донат через VK Pay
+  donateBtn.addEventListener('click', async () => {
+    if (isVkEnvironment && window.vkBridge) {
+      try {
+        await vkBridge.send('VKWebAppOpenPayForm', {
+          action: 'transfer-to-user',
+          params: {
+            user_id: 12345678 // Замени на свой VK ID
+          }
+        });
+      } catch (e) {
+        showToast('Не удалось открыть форму оплаты');
+      }
+    } else {
+      showToast('Функция доната доступна внутри приложения VK!');
+    }
   });
 </script>
 
