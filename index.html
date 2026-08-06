@@ -734,20 +734,11 @@
   }
 
 // Кнопка поддержки (Донат)
-  donateBtn.addEventListener('click', async () => {
+  donateBtn.addEventListener('click', () => {
     const donutUrl = 'https://vk.ru/club236941413?w=donut_payment-236941413';
     
-    if (isVkEnvironment && window.vkBridge) {
-      try {
-        await vkBridge.send('VKWebAppOpenURL', {
-          url: donutUrl
-        });
-      } catch (e) {
-        window.open(donutUrl, '_blank');
-      }
-    } else {
-      window.open(donutUrl, '_blank');
-    }
+    // Прямое открытие новой вкладки браузера
+    window.open(donutUrl, '_blank');
   });
 </script>
 
