@@ -4,9 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Master & Tag Studio</title>
+  <!-- Встроенный фавикон для устранения 404 -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
+  
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
+  
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -136,47 +140,47 @@
     .pacman-loader {
       display: none;
       margin: 15px auto 5px auto;
-      width: 200px;
-      height: 30px;
+      width: 220px;
+      height: 32px;
       position: relative;
       overflow: hidden;
       background: #f0f4f8;
-      border-radius: 15px;
+      border-radius: 16px;
+      border: 1px solid #e0e8f0;
     }
     .pacman {
       width: 0;
       height: 0;
-      border-right: 10px solid transparent;
-      border-top: 10px solid #ffcc00;
-      border-left: 10px solid #ffcc00;
-      border-bottom: 10px solid #ffcc00;
-      border-top-left-radius: 10px;
-      border-top-right-radius: 10px;
-      border-bottom-left-radius: 10px;
-      border-bottom-right-radius: 10px;
+      border-right: 12px solid transparent;
+      border-top: 12px solid #ffcc00;
+      border-left: 12px solid #ffcc00;
+      border-bottom: 12px solid #ffcc00;
+      border-radius: 12px;
       position: absolute;
-      top: 5px;
+      top: 4px;
       left: 10px;
       z-index: 2;
-      animation: chomp 0.3s infinite alternate;
+      animation: chomp 0.25s infinite alternate;
     }
     @keyframes chomp {
-      0% { border-right: 10px solid #ffcc00; }
-      100% { border-right: 10px solid transparent; }
+      0% { border-right: 12px solid #ffcc00; }
+      100% { border-right: 12px solid transparent; }
     }
     .notes-track {
       position: absolute;
       top: 6px;
       left: 35px;
-      right: 10px;
+      right: 0;
       height: 20px;
       display: flex;
-      justify-content: space-around;
+      gap: 25px;
       align-items: center;
       font-size: 14px;
+      animation: moveNotes 1.2s linear infinite;
     }
-    .note-item {
-      animation: eatNote 1.5s infinite linear;
+    @keyframes moveNotes {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-40px); }
     }
     .progress-bar-container {
       width: 100%;
@@ -273,10 +277,11 @@
   <div id="pacmanLoader" class="pacman-loader">
     <div class="pacman"></div>
     <div class="notes-track">
-      <span class="note-item">🎵</span>
-      <span class="note-item">🎶</span>
-      <span class="note-item">🎵</span>
-      <span class="note-item">🎶</span>
+      <span>🎵</span>
+      <span>🎶</span>
+      <span>🎵</span>
+      <span>🎶</span>
+      <span>🎵</span>
     </div>
   </div>
   <div id="progressContainer" class="progress-bar-container">
@@ -291,7 +296,7 @@
   <!-- Блок доната -->
   <div id="donateSection" class="donate-box">
     <div class="donate-text">Нравится сервис? Поддержи разработку ☕</div>
-    <button id="donateBtn" class="btn btn-donate">Поддержать (VK Pay)</button>
+    <button id="donateBtn" class="btn btn-donate">Поддержать авторов</button>
   </div>
 </div>
 
@@ -301,12 +306,15 @@
   let isVkEnvironment = false;
   let currentObjectUrl = null;
 
+  // Безопасная инициализация VK Bridge
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
       isVkEnvironment = true;
     }
-  } catch(e) {}
+  } catch(e) {
+    console.warn("VK Bridge инициализация не удалась", e);
+  }
 
   function showToast(message) {
     const toast = document.getElementById('toast');
@@ -379,14 +387,12 @@
       return;
     }
 
-    // Включаем лоадеры и блокируем кнопку
     processBtn.disabled = true;
     downloadBtn.style.display = 'none';
     pacmanLoader.style.display = 'block';
     progressContainer.style.display = 'block';
     setProgress(5, 'Инициализация DSP обработчика...');
 
-    // Даем браузеру обновить UI перед тяжелыми вычислениями
     await new Promise(r => setTimeout(r, 50));
 
     try {
@@ -528,7 +534,6 @@
     }
   });
 
-  // Асинхронное поблочное кодирование MP3 без зависания интерфейса
   function encodeMp3Async(buffer, onProgress) {
     return new Promise((resolve) => {
       const channels = buffer.numberOfChannels;
@@ -554,7 +559,7 @@
       let offset = 0;
 
       function processChunk() {
-        const chunkSize = 20; // Обрабатываем по 20 блоков за такт main thread
+        const chunkSize = 20;
         let count = 0;
 
         while (offset < sampleCount && count < chunkSize) {
@@ -577,7 +582,7 @@
         onProgress(Math.min(1, offset / sampleCount));
 
         if (offset < sampleCount) {
-          setTimeout(processChunk, 0); // Отдаём управление браузеру (prevent "Page Unresponsive")
+          setTimeout(processChunk, 0);
         } else {
           const mp3buf = mp3encoder.flush();
           if (mp3buf.length > 0) mp3Data.push(mp3buf);
@@ -621,7 +626,6 @@
     view.setUint32(4, 36 + dataSize, true);
     writeString(view, 8, 'WAVE');
     writeString(view, 12, 'fmt ');
-    writeString(view, 12, 'fmt ');
     view.setUint32(16, 16, true);
     view.setUint16(20, format, true);
     view.setUint16(22, numChannels, true);
@@ -659,21 +663,26 @@
     }
   }
 
+  // Безопасный клик по Скачать с таймаутом рекламы
   downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
 
     if (isVkEnvironment && window.vkBridge) {
       try {
-        await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' });
+        // Попытка показать межстраничную рекламу
+        await Promise.race([
+          vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' }),
+          new Promise(resolve => setTimeout(resolve, 3000)) // Таймаут 3 сек на случай блокировки
+        ]);
       } catch (e) {
-        console.log('Реклама была пропущена или недоступна:', e);
+        console.log('Реклама не была показана:', e);
       }
     }
 
     saveProcessedFile();
   });
 
-  function saveProcessedFile() {
+  async function saveProcessedFile() {
     const ext = outputFormatSelect.value;
     const artist = document.getElementById('tagArtist').value.trim();
     const title = document.getElementById('tagTitle').value.trim();
@@ -687,51 +696,56 @@
 
     statusDiv.innerText = 'Подготовка файла к сохранению...';
 
-    const reader = new FileReader();
-    reader.onloadend = async function () {
-      const dataUrl = reader.result;
+    // Проверка поддержки VKWebAppDownloadFile без устаревшего vkBridge.supports
+    let supportsDownload = false;
+    if (isVkEnvironment && window.vkBridge && typeof vkBridge.supportsAsync === 'function') {
+      try {
+        supportsDownload = await vkBridge.supportsAsync('VKWebAppDownloadFile');
+      } catch(e) {}
+    }
 
-      if (isVkEnvironment && window.vkBridge && vkBridge.supports && vkBridge.supports('VKWebAppDownloadFile')) {
+    if (supportsDownload) {
+      const reader = new FileReader();
+      reader.onloadend = async function () {
         try {
           await vkBridge.send('VKWebAppDownloadFile', {
-            url: dataUrl,
+            url: reader.result,
             filename: fileName
           });
-          statusDiv.innerText = 'Готово!';
-          return;
+          statusDiv.innerText = 'Файл сохранен!';
         } catch (e) {
-          console.warn('VK Bridge download error, fallback to <a> tag:', e);
+          fallbackDownload(fileName);
         }
-      }
-
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      statusDiv.innerText = 'Готово!';
-    };
-
-    reader.readAsDataURL(finalBlob);
+      };
+      reader.readAsDataURL(finalBlob);
+    } else {
+      fallbackDownload(fileName);
+    }
   }
 
+  function fallbackDownload(fileName) {
+    const a = document.createElement('a');
+    a.href = currentObjectUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    statusDiv.innerText = 'Файл сохранен!';
+  }
+
+  // Кнопка поддержки (Донат)
   donateBtn.addEventListener('click', async () => {
     if (isVkEnvironment && window.vkBridge) {
       try {
-        await vkBridge.send('VKWebAppOpenPayForm', {
-          action: 'transfer-to-user',
-          params: {
-            user_id: 12345678
-          }
-        });
-      } catch (e) {
-        vkBridge.send('VKWebAppOpenURL', {
+        // Открытие универсальной ссылки на поддержку группы/автора
+        await vkBridge.send('VKWebAppOpenURL', {
           url: 'https://vk.com/donut/25kadr'
         });
+      } catch (e) {
+        showToast('Не удалось открыть страницу поддержки.');
       }
     } else {
-      showToast('Донат доступен при открытии внутри VK!');
+      window.open('https://vk.com/donut/25kadr', '_blank');
     }
   });
 </script>
