@@ -59,18 +59,14 @@
       font-size: 15px;
       cursor: pointer;
       margin-top: 15px;
-      transition: background 0.2s;
+      transition: background 0.2s, opacity 0.2s;
     }
     .btn:hover { background: #2276d7; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-download { background: #4bb34b; display: none; margin-top: 10px; }
     .btn-download:hover { background: #3ec13e; }
-    .btn-donate {
-      background: #ff9800;
-      margin-top: 10px;
-    }
-    .btn-donate:hover { background: #e68a00; }
     audio { width: 100%; margin-top: 15px; display: none; }
-    .status { font-size: 13px; color: #666; text-align: center; margin-top: 10px; }
+    .status { font-size: 13px; color: #666; text-align: center; margin-top: 10px; font-weight: 500; }
     .info-badge {
       background: #e5f2ff;
       color: #0077ff;
@@ -108,6 +104,94 @@
     .toast.show {
       transform: translateX(-50%) translateY(0);
       opacity: 1;
+    }
+
+    /* Блок доната */
+    .donate-box {
+      margin-top: 20px;
+      padding: 14px;
+      background: #fff8e1;
+      border: 1px dashed #ffa726;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .donate-text {
+      font-size: 13px;
+      color: #795548;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .btn-donate {
+      background: #ff9800;
+      color: white;
+      margin-top: 0;
+      padding: 10px;
+      font-size: 14px;
+    }
+    .btn-donate:hover { 
+      background: #f57c00; 
+    }
+
+    /* Pacman Анимация */
+    .pacman-loader {
+      display: none;
+      margin: 15px auto 5px auto;
+      width: 200px;
+      height: 30px;
+      position: relative;
+      overflow: hidden;
+      background: #f0f4f8;
+      border-radius: 15px;
+    }
+    .pacman {
+      width: 0;
+      height: 0;
+      border-right: 10px solid transparent;
+      border-top: 10px solid #ffcc00;
+      border-left: 10px solid #ffcc00;
+      border-bottom: 10px solid #ffcc00;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      border-bottom-left-radius: 10px;
+      border-bottom-right-radius: 10px;
+      position: absolute;
+      top: 5px;
+      left: 10px;
+      z-index: 2;
+      animation: chomp 0.3s infinite alternate;
+    }
+    @keyframes chomp {
+      0% { border-right: 10px solid #ffcc00; }
+      100% { border-right: 10px solid transparent; }
+    }
+    .notes-track {
+      position: absolute;
+      top: 6px;
+      left: 35px;
+      right: 10px;
+      height: 20px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      font-size: 14px;
+    }
+    .note-item {
+      animation: eatNote 1.5s infinite linear;
+    }
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #2787f5;
+      transition: width 0.1s ease;
     }
   </style>
 </head>
@@ -185,11 +269,30 @@
 
   <button id="processBtn" class="btn">Очистить мусор & Обработать</button>
 
+  <!-- Pacman Анимация & Индикатор -->
+  <div id="pacmanLoader" class="pacman-loader">
+    <div class="pacman"></div>
+    <div class="notes-track">
+      <span class="note-item">🎵</span>
+      <span class="note-item">🎶</span>
+      <span class="note-item">🎵</span>
+      <span class="note-item">🎶</span>
+    </div>
+  </div>
+  <div id="progressContainer" class="progress-bar-container">
+    <div id="progressBar" class="progress-bar-fill"></div>
+  </div>
+
   <div id="status" class="status"></div>
   <audio id="audioPreview" controls></audio>
   
   <button id="downloadBtn" class="btn btn-download">Скачать готовый файл</button>
-  <button id="donateBtn" class="btn btn-donate">Поддержать разработчика ☕</button>
+
+  <!-- Блок доната -->
+  <div id="donateSection" class="donate-box">
+    <div class="donate-text">Нравится сервис? Поддержи разработку ☕</div>
+    <button id="donateBtn" class="btn btn-donate">Поддержать (VK Pay)</button>
+  </div>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -198,7 +301,6 @@
   let isVkEnvironment = false;
   let currentObjectUrl = null;
 
-  // Инициализация VK Bridge
   try {
     if (window.vkBridge) {
       vkBridge.send('VKWebAppInit');
@@ -228,6 +330,9 @@
   const donateBtn = document.getElementById('donateBtn');
   const audioPreview = document.getElementById('audioPreview');
   const statusDiv = document.getElementById('status');
+  const pacmanLoader = document.getElementById('pacmanLoader');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
 
   let audioBuffer = null;
   let coverArrayBuffer = null;
@@ -263,177 +368,234 @@
     reader.readAsArrayBuffer(file);
   });
 
+  function setProgress(percent, text) {
+    progressBar.style.width = percent + '%';
+    if (text) statusDiv.innerText = text;
+  }
+
   processBtn.addEventListener('click', async () => {
     if (!audioBuffer) {
       showToast('Сначала выберите аудиофайл!');
       return;
     }
 
-    const selectedFormat = outputFormatSelect.value;
-    statusDiv.innerText = `Применение мастеринга и рендеринг...`;
+    // Включаем лоадеры и блокируем кнопку
+    processBtn.disabled = true;
+    downloadBtn.style.display = 'none';
+    pacmanLoader.style.display = 'block';
+    progressContainer.style.display = 'block';
+    setProgress(5, 'Инициализация DSP обработчика...');
 
-    const offlineCtx = new OfflineAudioContext(
-      audioBuffer.numberOfChannels,
-      audioBuffer.length,
-      44100
-    );
+    // Даем браузеру обновить UI перед тяжелыми вычислениями
+    await new Promise(r => setTimeout(r, 50));
 
-    const source = offlineCtx.createBufferSource();
-    source.buffer = audioBuffer;
-
-    const hpFilter = offlineCtx.createBiquadFilter();
-    hpFilter.type = 'highpass';
-    const lowEQ = offlineCtx.createBiquadFilter();
-    lowEQ.type = 'lowshelf';
-    const highEQ = offlineCtx.createBiquadFilter();
-    highEQ.type = 'highshelf';
-    const compressor = offlineCtx.createDynamicsCompressor();
-
-    // Защитный Brickwall Limiter на выходе
-    const limiter = offlineCtx.createDynamicsCompressor();
-    limiter.threshold.value = -0.5;
-    limiter.knee.value = 0.0;
-    limiter.ratio.value = 20.0;
-    limiter.attack.value = 0.001;
-    limiter.release.value = 0.1;
-
-    const preset = document.getElementById('genrePreset').value;
-
-    if (preset === 'rock') {
-      hpFilter.frequency.value = 35;
-      lowEQ.frequency.value = 100; lowEQ.gain.value = 2.5;
-      highEQ.frequency.value = 8000; highEQ.gain.value = -1.0;
-      compressor.threshold.value = -16; compressor.ratio.value = 3.5;
-    } else if (preset === 'pop') {
-      hpFilter.frequency.value = 30;
-      lowEQ.frequency.value = 80; lowEQ.gain.value = 1.5;
-      highEQ.frequency.value = 10000; highEQ.gain.value = 3.0;
-      compressor.threshold.value = -14; compressor.ratio.value = 4.0;
-    } else if (preset === 'hiphop') {
-      hpFilter.frequency.value = 28;
-      lowEQ.frequency.value = 55; lowEQ.gain.value = 3.5;
-      highEQ.frequency.value = 9000; highEQ.gain.value = 1.5;
-      compressor.threshold.value = -15; compressor.ratio.value = 3.0;
-    } else if (preset === 'acoustic') {
-      hpFilter.frequency.value = 40;
-      lowEQ.frequency.value = 120; lowEQ.gain.value = 0.5;
-      highEQ.frequency.value = 12000; highEQ.gain.value = 1.0;
-      compressor.threshold.value = -10; compressor.ratio.value = 2.0;
-    } else {
-      hpFilter.frequency.value = 30;
-      lowEQ.frequency.value = 100; lowEQ.gain.value = 0;
-      highEQ.frequency.value = 10000; highEQ.gain.value = 0;
-      compressor.threshold.value = -12; compressor.ratio.value = 2.5;
-    }
-
-    source.connect(hpFilter);
-    hpFilter.connect(lowEQ);
-    lowEQ.connect(highEQ);
-    highEQ.connect(compressor);
-    compressor.connect(limiter);
-    limiter.connect(offlineCtx.destination);
-    source.start(0);
-
-    const renderedBuffer = await offlineCtx.startRendering();
-
-    if (selectedFormat === 'wav') {
-      statusDiv.innerText = 'Сборка чистейшего 16-bit PCM WAV...';
-      const wavBuffer = createStandardWavBuffer(renderedBuffer);
-      finalBlob = new Blob([wavBuffer], { type: 'audio/wav' });
-    } else {
-      statusDiv.innerText = 'Кодирование в MP3 320 kbps & Вшивка обложки...';
-      const rawMp3Buffer = encodeMp3320(renderedBuffer);
+    try {
+      const selectedFormat = outputFormatSelect.value;
       
-      try {
-        const writer = new ID3Writer(rawMp3Buffer);
-        const artist = document.getElementById('tagArtist').value;
-        const title = document.getElementById('tagTitle').value;
-        const album = document.getElementById('tagAlbum').value;
-        const genre = document.getElementById('tagGenre').value;
-        const year = document.getElementById('tagYear').value;
-        const track = document.getElementById('tagTrack').value;
+      const offlineCtx = new OfflineAudioContext(
+        audioBuffer.numberOfChannels,
+        audioBuffer.length,
+        44100
+      );
 
-        if (title) writer.setFrame('TIT2', title);
-        if (artist) writer.setFrame('TPE1', [artist]);
-        if (album) writer.setFrame('TALB', album);
-        if (genre) writer.setFrame('TCON', [genre]);
-        if (year) writer.setFrame('TYER', parseInt(year));
-        if (track) writer.setFrame('TRCK', track.toString());
+      const source = offlineCtx.createBufferSource();
+      source.buffer = audioBuffer;
 
-        if (coverArrayBuffer) {
-          writer.setFrame('APIC', {
-            type: 3,
-            data: coverArrayBuffer,
-            description: 'Cover'
-          });
-        }
-        writer.addTag();
-        finalBlob = writer.getBlob();
-      } catch(e) {
-        console.warn("Ошибка ID3 MP3:", e);
-        finalBlob = new Blob([rawMp3Buffer], { type: 'audio/mp3' });
+      const hpFilter = offlineCtx.createBiquadFilter();
+      hpFilter.type = 'highpass';
+      const lowEQ = offlineCtx.createBiquadFilter();
+      lowEQ.type = 'lowshelf';
+      const highEQ = offlineCtx.createBiquadFilter();
+      highEQ.type = 'highshelf';
+      const compressor = offlineCtx.createDynamicsCompressor();
+
+      const limiter = offlineCtx.createDynamicsCompressor();
+      limiter.threshold.value = -0.5;
+      limiter.knee.value = 0.0;
+      limiter.ratio.value = 20.0;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.1;
+
+      const preset = document.getElementById('genrePreset').value;
+
+      if (preset === 'rock') {
+        hpFilter.frequency.value = 35;
+        lowEQ.frequency.value = 100; lowEQ.gain.value = 2.5;
+        highEQ.frequency.value = 8000; highEQ.gain.value = -1.0;
+        compressor.threshold.value = -16; compressor.ratio.value = 3.5;
+      } else if (preset === 'pop') {
+        hpFilter.frequency.value = 30;
+        lowEQ.frequency.value = 80; lowEQ.gain.value = 1.5;
+        highEQ.frequency.value = 10000; highEQ.gain.value = 3.0;
+        compressor.threshold.value = -14; compressor.ratio.value = 4.0;
+      } else if (preset === 'hiphop') {
+        hpFilter.frequency.value = 28;
+        lowEQ.frequency.value = 55; lowEQ.gain.value = 3.5;
+        highEQ.frequency.value = 9000; highEQ.gain.value = 1.5;
+        compressor.threshold.value = -15; compressor.ratio.value = 3.0;
+      } else if (preset === 'acoustic') {
+        hpFilter.frequency.value = 40;
+        lowEQ.frequency.value = 120; lowEQ.gain.value = 0.5;
+        highEQ.frequency.value = 12000; highEQ.gain.value = 1.0;
+        compressor.threshold.value = -10; compressor.ratio.value = 2.0;
+      } else {
+        hpFilter.frequency.value = 30;
+        lowEQ.frequency.value = 100; lowEQ.gain.value = 0;
+        highEQ.frequency.value = 10000; highEQ.gain.value = 0;
+        compressor.threshold.value = -12; compressor.ratio.value = 2.5;
       }
-    }
 
-    // Освобождаем старый URL для экономии памяти
-    if (currentObjectUrl) {
-      URL.revokeObjectURL(currentObjectUrl);
+      source.connect(hpFilter);
+      hpFilter.connect(lowEQ);
+      lowEQ.connect(highEQ);
+      highEQ.connect(compressor);
+      compressor.connect(limiter);
+      limiter.connect(offlineCtx.destination);
+      source.start(0);
+
+      setProgress(20, 'Применение эквалайзера и компрессии...');
+      await new Promise(r => setTimeout(r, 40));
+
+      const renderedBuffer = await offlineCtx.startRendering();
+
+      if (selectedFormat === 'wav') {
+        setProgress(70, 'Сборка 16-bit PCM WAV...');
+        await new Promise(r => setTimeout(r, 40));
+        const wavBuffer = createStandardWavBuffer(renderedBuffer);
+        finalBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+      } else {
+        setProgress(50, 'Кодирование MP3 320 kbps (поблочно)...');
+        await new Promise(r => setTimeout(r, 40));
+        const rawMp3Buffer = await encodeMp3Async(renderedBuffer, (p) => {
+          setProgress(50 + Math.floor(p * 0.4), `Кодирование MP3: ${Math.floor(p * 100)}%`);
+        });
+
+        setProgress(92, 'Запись ID3-тегов и обложки...');
+        await new Promise(r => setTimeout(r, 30));
+
+        try {
+          const writer = new ID3Writer(rawMp3Buffer);
+          const artist = document.getElementById('tagArtist').value;
+          const title = document.getElementById('tagTitle').value;
+          const album = document.getElementById('tagAlbum').value;
+          const genre = document.getElementById('tagGenre').value;
+          const year = document.getElementById('tagYear').value;
+          const track = document.getElementById('tagTrack').value;
+
+          if (title) writer.setFrame('TIT2', title);
+          if (artist) writer.setFrame('TPE1', [artist]);
+          if (album) writer.setFrame('TALB', album);
+          if (genre) writer.setFrame('TCON', [genre]);
+          if (year) writer.setFrame('TYER', parseInt(year));
+          if (track) writer.setFrame('TRCK', track.toString());
+
+          if (coverArrayBuffer) {
+            writer.setFrame('APIC', {
+              type: 3,
+              data: coverArrayBuffer,
+              description: 'Cover'
+            });
+          }
+          writer.addTag();
+          finalBlob = writer.getBlob();
+        } catch(e) {
+          console.warn("Ошибка ID3 MP3:", e);
+          finalBlob = new Blob([rawMp3Buffer], { type: 'audio/mp3' });
+        }
+      }
+
+      setProgress(100, 'Готово!');
+
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+      currentObjectUrl = URL.createObjectURL(finalBlob);
+      
+      audioPreview.src = currentObjectUrl;
+      audioPreview.style.display = 'block';
+      downloadBtn.style.display = 'block';
+
+    } catch (err) {
+      console.error(err);
+      showToast('Произошла ошибка при обработке!');
+      statusDiv.innerText = 'Ошибка обработки.';
+    } finally {
+      processBtn.disabled = false;
+      pacmanLoader.style.display = 'none';
+      setTimeout(() => {
+        progressContainer.style.display = 'none';
+      }, 1500);
     }
-    currentObjectUrl = URL.createObjectURL(finalBlob);
-    
-    audioPreview.src = currentObjectUrl;
-    audioPreview.style.display = 'block';
-    downloadBtn.style.display = 'block';
-    statusDiv.innerText = `Готово! Файл ${selectedFormat.toUpperCase()} успешно сформирован.`;
   });
 
-  function encodeMp3320(buffer) {
-    const channels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 320);
-    const mp3Data = [];
+  // Асинхронное поблочное кодирование MP3 без зависания интерфейса
+  function encodeMp3Async(buffer, onProgress) {
+    return new Promise((resolve) => {
+      const channels = buffer.numberOfChannels;
+      const sampleRate = buffer.sampleRate;
+      const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 320);
+      const mp3Data = [];
 
-    const sampleCount = buffer.length;
-    const left = buffer.getChannelData(0);
-    const right = channels > 1 ? buffer.getChannelData(1) : left;
+      const sampleCount = buffer.length;
+      const left = buffer.getChannelData(0);
+      const right = channels > 1 ? buffer.getChannelData(1) : left;
 
-    const sampleBlockSize = 1152;
-    const leftInt16 = new Int16Array(sampleCount);
-    const rightInt16 = new Int16Array(sampleCount);
+      const sampleBlockSize = 1152;
+      const leftInt16 = new Int16Array(sampleCount);
+      const rightInt16 = new Int16Array(sampleCount);
 
-    for (let i = 0; i < sampleCount; i++) {
-      let sL = Math.max(-1, Math.min(1, left[i]));
-      leftInt16[i] = sL < 0 ? sL * 0x8000 : sL * 0x7FFF;
-      let sR = Math.max(-1, Math.min(1, right[i]));
-      rightInt16[i] = sR < 0 ? sR * 0x8000 : sR * 0x7FFF;
-    }
-
-    for (let i = 0; i < sampleCount; i += sampleBlockSize) {
-      const leftChunk = leftInt16.subarray(i, Math.min(i + sampleBlockSize, sampleCount));
-      const rightChunk = rightInt16.subarray(i, Math.min(i + sampleBlockSize, sampleCount));
-      
-      let mp3buf;
-      if (channels === 2) {
-        mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
-      } else {
-        mp3buf = mp3encoder.encodeBuffer(leftChunk);
+      for (let i = 0; i < sampleCount; i++) {
+        let sL = Math.max(-1, Math.min(1, left[i]));
+        leftInt16[i] = sL < 0 ? sL * 0x8000 : sL * 0x7FFF;
+        let sR = Math.max(-1, Math.min(1, right[i]));
+        rightInt16[i] = sR < 0 ? sR * 0x8000 : sR * 0x7FFF;
       }
-      
-      if (mp3buf.length > 0) mp3Data.push(mp3buf);
-    }
 
-    const mp3buf = mp3encoder.flush();
-    if (mp3buf.length > 0) mp3Data.push(mp3buf);
+      let offset = 0;
 
-    let totalLen = 0;
-    for (let i = 0; i < mp3Data.length; i++) totalLen += mp3Data[i].length;
-    const merged = new Uint8Array(totalLen);
-    let offset = 0;
-    for (let i = 0; i < mp3Data.length; i++) {
-      merged.set(mp3Data[i], offset);
-      offset += mp3Data[i].length;
-    }
-    return merged.buffer;
+      function processChunk() {
+        const chunkSize = 20; // Обрабатываем по 20 блоков за такт main thread
+        let count = 0;
+
+        while (offset < sampleCount && count < chunkSize) {
+          const leftChunk = leftInt16.subarray(offset, Math.min(offset + sampleBlockSize, sampleCount));
+          const rightChunk = rightInt16.subarray(offset, Math.min(offset + sampleBlockSize, sampleCount));
+          
+          let mp3buf;
+          if (channels === 2) {
+            mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+          } else {
+            mp3buf = mp3encoder.encodeBuffer(leftChunk);
+          }
+          
+          if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+          offset += sampleBlockSize;
+          count++;
+        }
+
+        onProgress(Math.min(1, offset / sampleCount));
+
+        if (offset < sampleCount) {
+          setTimeout(processChunk, 0); // Отдаём управление браузеру (prevent "Page Unresponsive")
+        } else {
+          const mp3buf = mp3encoder.flush();
+          if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+          let totalLen = 0;
+          for (let i = 0; i < mp3Data.length; i++) totalLen += mp3Data[i].length;
+          const merged = new Uint8Array(totalLen);
+          let writeOffset = 0;
+          for (let i = 0; i < mp3Data.length; i++) {
+            merged.set(mp3Data[i], writeOffset);
+            writeOffset += mp3Data[i].length;
+          }
+          resolve(merged.buffer);
+        }
+      }
+
+      processChunk();
+    });
   }
 
   function createStandardWavBuffer(audioBuffer) {
@@ -458,6 +620,7 @@
     writeString(view, 0, 'RIFF');
     view.setUint32(4, 36 + dataSize, true);
     writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
     writeString(view, 12, 'fmt ');
     view.setUint32(16, 16, true);
     view.setUint16(20, format, true);
@@ -496,11 +659,9 @@
     }
   }
 
-  // Скачивание файла с предварительным показом рекламы VK
   downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
 
-    // Пытаемся показать рекламу перед выгрузкой
     if (isVkEnvironment && window.vkBridge) {
       try {
         await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' });
@@ -536,7 +697,7 @@
             url: dataUrl,
             filename: fileName
           });
-          statusDiv.innerText = 'Файл отправлен на загрузку!';
+          statusDiv.innerText = 'Готово!';
           return;
         } catch (e) {
           console.warn('VK Bridge download error, fallback to <a> tag:', e);
@@ -549,27 +710,28 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      statusDiv.innerText = 'Файл сохранен!';
+      statusDiv.innerText = 'Готово!';
     };
 
     reader.readAsDataURL(finalBlob);
   }
 
-  // Донат через VK Pay
   donateBtn.addEventListener('click', async () => {
     if (isVkEnvironment && window.vkBridge) {
       try {
         await vkBridge.send('VKWebAppOpenPayForm', {
           action: 'transfer-to-user',
           params: {
-            user_id: 12345678 // Замени на свой VK ID
+            user_id: 12345678
           }
         });
       } catch (e) {
-        showToast('Не удалось открыть форму оплаты');
+        vkBridge.send('VKWebAppOpenURL', {
+          url: 'https://vk.com/donut/25kadr'
+        });
       }
     } else {
-      showToast('Функция доната доступна внутри приложения VK!');
+      showToast('Донат доступен при открытии внутри VK!');
     }
   });
 </script>
