@@ -733,19 +733,20 @@
     statusDiv.innerText = 'Файл сохранен!';
   }
 
-  // Кнопка поддержки (Донат)
+// Кнопка поддержки (Донат)
   donateBtn.addEventListener('click', async () => {
+    const donutUrl = 'https://vk.ru/club236941413?w=donut_payment-236941413';
+    
     if (isVkEnvironment && window.vkBridge) {
       try {
-        // Открытие универсальной ссылки на поддержку группы/автора
         await vkBridge.send('VKWebAppOpenURL', {
-          url: 'https://vk.com/donut/25kadr'
+          url: donutUrl
         });
       } catch (e) {
-        showToast('Не удалось открыть страницу поддержки.');
+        window.open(donutUrl, '_blank');
       }
     } else {
-      window.open('https://vk.com/donut/25kadr', '_blank');
+      window.open(donutUrl, '_blank');
     }
   });
 </script>
