@@ -273,9 +273,18 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  if (window.vkBridge) {
-    vkBridge.send('VKWebAppInit').catch(e => console.log('VK Init error:', e));
-  }
+  // Безопасная инициализация VK Bridge после загрузки DOM
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      if (window.vkBridge) {
+        vkBridge.send('VKWebAppInit')
+          .then(data => console.log('VK Bridge OK:', data))
+          .catch(err => console.warn('VK Bridge Init Warning:', err));
+      }
+    } catch (e) {
+      console.error('VK Bridge Error:', e);
+    }
+  });
 
   let currentObjectUrl = null;
 
