@@ -273,7 +273,6 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  // Инициализация VK Bridge
   if (window.vkBridge) {
     vkBridge.send('VKWebAppInit').catch(e => console.log('VK Init error:', e));
   }
@@ -645,7 +644,6 @@
 
     statusDiv.innerText = 'Подготовка файла к сохранению...';
 
-    // Взаимодействие с VK Bridge при скачивании
     if (window.vkBridge && vkBridge.supports && vkBridge.supports("VKWebAppDownloadFile")) {
       vkBridge.send("VKWebAppDownloadFile", {
         url: currentObjectUrl,
