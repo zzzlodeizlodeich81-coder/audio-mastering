@@ -7,8 +7,8 @@
   <!-- Встроенный фавикон -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
   
-  <!-- VK Bridge с версионированием -->
-  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/index.umd.js?v=1.0.1"></script>
+  <!-- VK Bridge SDK без параметров в URL -->
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/index.umd.js"></script>
   
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
@@ -278,18 +278,18 @@
 <script>eruda.init();</script>
 
 <script>
-  // Инициализация VK Bridge
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-      if (window.vkBridge) {
-        vkBridge.send('VKWebAppInit')
-          .then(data => console.log('VK Bridge OK:', data))
-          .catch(err => console.warn('VK Bridge Init Warning:', err));
-      }
-    } catch (e) {
-      console.error('VK Bridge Error:', e);
+  // Мгновенная инициализация VK Bridge без ожидания DOMContentLoaded
+  try {
+    if (typeof vkBridge !== 'undefined') {
+      vkBridge.send('VKWebAppInit')
+        .then(data => console.log('VK Bridge OK:', data))
+        .catch(err => console.warn('VK Bridge Init Warning:', err));
+    } else {
+      console.warn('vkBridge не обнаружен');
     }
-  });
+  } catch (e) {
+    console.error('VK Bridge Error:', e);
+  }
 
   let currentObjectUrl = null;
 
