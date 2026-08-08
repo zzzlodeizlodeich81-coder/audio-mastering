@@ -277,11 +277,16 @@
 <script>eruda.init();</script>
 
 <script>
+  let isVk = false;
+
   // Мгновенная инициализация VK Bridge без ожидания DOMContentLoaded
   try {
     if (typeof vkBridge !== 'undefined') {
       vkBridge.send('VKWebAppInit')
-        .then(data => console.log('VK Bridge OK:', data))
+        .then(data => {
+          isVk = true;
+          console.log('VK Bridge OK:', data);
+        })
         .catch(err => console.warn('VK Bridge Init Warning:', err));
     } else {
       console.warn('vkBridge не обнаружен');
@@ -360,6 +365,17 @@
     if (!audioBuffer) {
       showToast('Сначала выберите аудиофайл!');
       return;
+    }
+
+    if (isVk) {
+      try {
+        const adsCheck = await vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'interstitial' });
+        if (adsCheck.result) {
+          await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' });
+        }
+      } catch (e) {
+        console.log('Реклама пропущена:', e);
+      }
     }
 
     processBtn.disabled = true;
@@ -638,8 +654,20 @@
     }
   }
 
-  downloadBtn.addEventListener('click', () => {
+  downloadBtn.addEventListener('click', async () => {
     if (!finalBlob) return;
+
+    if (isVk) {
+      try {
+        const rewardCheck = await vkBridge.send('VKWebAppCheckNativeAds', { ad_format: 'reward' });
+        if (rewardCheck.result) {
+          await vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' });
+        }
+      } catch (e) {
+        console.log('Reward реклама пропущена или недоступна:', e);
+      }
+    }
+
     saveProcessedFile();
   });
 
