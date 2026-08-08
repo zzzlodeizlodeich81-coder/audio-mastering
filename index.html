@@ -7,8 +7,8 @@
   <!-- Встроенный фавикон -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
   
-  <!-- VK Bridge -->
-  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/index.umd.js"></script>
+  <!-- VK Bridge с версионированием -->
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/index.umd.js?v=1.0.1"></script>
   
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
@@ -32,6 +32,7 @@
       width: 100%;
     }
     h2 { margin-top: 0; color: #2c2d2e; text-align: center; font-size: 20px; }
+    .version-tag { font-size: 12px; color: #2787f5; font-weight: normal; margin-left: 5px; }
     .section-title {
       font-weight: bold;
       color: #2787f5;
@@ -178,7 +179,7 @@
 <body>
 
 <div class="card">
-  <h2>Мастеринг & Очистка для Стримингов</h2>
+  <h2>Мастеринг & Очистка <span class="version-tag">v1.0.1</span></h2>
   <div class="info-badge">Чистый звук без мусора Suno</div>
 
   <div class="group">
@@ -272,8 +273,12 @@
 
 <div id="toast" class="toast"></div>
 
+<!-- Экранная консоль отладки Eruda -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
+
 <script>
-  // Безопасная инициализация VK Bridge после загрузки DOM
+  // Инициализация VK Bridge
   document.addEventListener('DOMContentLoaded', () => {
     try {
       if (window.vkBridge) {
