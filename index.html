@@ -643,7 +643,7 @@
     saveProcessedFile();
   });
 
-  function saveProcessedFile() {
+  async function saveProcessedFile() {
     const ext = outputFormatSelect.value;
     const artist = document.getElementById('tagArtist').value.trim();
     const title = document.getElementById('tagTitle').value.trim();
@@ -657,31 +657,49 @@
 
     statusDiv.innerText = 'Подготовка файла к сохранению...';
 
-    if (window.vkBridge && vkBridge.supports && vkBridge.supports("VKWebAppDownloadFile")) {
-      vkBridge.send("VKWebAppDownloadFile", {
-        url: currentObjectUrl,
-        filename: fileName
-      }).then(data => {
-        if (data.result) {
-          statusDiv.innerText = 'Файл сохранен через VK!';
-        }
-      }).catch(error => {
-        console.warn('VK Native Download Error, fallbacking...', error);
+    // Читаем Blob как Data URL для стабильной передачи в VK Bridge и моб. WebView
+    const reader = new FileReader();
+    reader.readAsDataURL(finalBlob);
+    reader.onloadend = function () {
+      const dataUrl = reader.result;
+
+      if (window.vkBridge && vkBridge.supports && vkBridge.supports("VKWebAppDownloadFile")) {
+        vkBridge.send("VKWebAppDownloadFile", {
+          url: dataUrl,
+          filename: fileName
+        }).then(data => {
+          if (data.result) {
+            statusDiv.innerText = 'Файл успешно сохранен!';
+          }
+        }).catch(error => {
+          console.warn('VK Native Download Error, fallbacking...', error);
+          fallbackDownload(fileName);
+        });
+      } else {
         fallbackDownload(fileName);
-      });
-    } else {
-      fallbackDownload(fileName);
-    }
+      }
+    };
   }
 
   function fallbackDownload(fileName) {
+    // Принудительный octet-stream MIME тип защищает файл от открытия встроенным плеером Android/iOS
+    const forceDownloadBlob = new Blob([finalBlob], { type: 'application/octet-stream' });
+    const downloadUrl = URL.createObjectURL(forceDownloadBlob);
+
     const a = document.createElement('a');
-    a.href = currentObjectUrl;
+    a.style.display = 'none';
+    a.href = downloadUrl;
     a.download = fileName;
+    a.target = '_blank';
+
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    statusDiv.innerText = 'Файл сохранен!';
+    
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+      statusDiv.innerText = 'Файл сохранен!';
+    }, 1000);
   }
 </script>
 
